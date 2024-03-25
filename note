@@ -1,0 +1,109 @@
+#!/bin/bash
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# VARS
+[[ -z $NOTE_FOLDER ]] && NOTE_FOLDER=~/Notes
+[[ -z $NOTE_EDITOR ]] && NOTE_EDITOR=vi
+[[ -z $NOTE_EXT ]] && NOTE_EXT=md
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# MAIN
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+note_main() {
+	if [[ "$0" == "$BASH_SOURCE" ]]; then
+		note_run "$@"
+	else
+		note_src
+	fi
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Runs when script is sourced
+note_src() {
+	source /usr/share/fzf/completion.bash
+	source /usr/share/fzf/key-bindings.bash
+    alias note="bash $BASH_SOURCE"
+
+    [ -n "$BASH" ] && complete -F _fzf_complete_note -o default -o bashdefault note
+    complete -o bashdefault -o default -F _fzf_complete_note_notrigger note
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Runs when script is executed
+note_run() {
+    if [ $2 ]; then
+        case $1 in
+            "del")
+                note_del $2;;
+            "add")
+                note_edit $2;;
+            "edit")
+                note_edit $2;;
+            *)
+                ;;
+        esac
+    elif [ $1 ]; then
+        case $1 in
+            "commit")
+                note_commit;;
+            "list")
+                note_list;;
+            *)
+                note_view $1;;
+        esac
+    else
+        note_list
+    fi
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# FZF
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Auto-completes with note list without the leading path and trailing extension
+_fzf_complete_note() {
+    _fzf_complete "--multi --reverse" "$@" < <(
+        grep --exclude-dir='.*' --line-buffered --color=never -r "^.*" $NOTE_FOLDER | cut -c $(( ${#NOTE_FOLDER} + 2 ))- | sed -e "s/.$NOTE_EXT:/: /g"
+    )
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Enables auto-complete on TAB press without ** trigger
+_fzf_complete_note_notrigger() {
+    FZF_COMPLETION_TRIGGER='' _fzf_complete_note
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Splits the selected line on ":" separator and displays only the file name
+_fzf_complete_note_post() {
+  IFS=':' read -ra FNAME <<< $(tee)
+  echo ${FNAME[0]}
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# COMMANDS
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Deletes the note
+note_del() {
+    rm $NOTE_FOLDER/$1.$NOTE_EXT
+    note_commit
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Launches the text editor for the note
+note_edit() {
+    $NOTE_EDITOR $NOTE_FOLDER/$(echo $1 | sed -e 's/://g').$NOTE_EXT
+    note_commit
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Displays note content, highlights headings
+note_view() {
+    cat $NOTE_FOLDER/$1.$NOTE_EXT | sed -e "s/^|openssl/`printf '\033[37m'`|/g" -e "s/$/`printf '\033[0m'`/g"
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Commits notes to git
+note_commit() {
+    cd $NOTE_FOLDER
+    git add -A
+    git commit -am "+note"
+    cd $(pwd)
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# Displays list of notes without leading path and trailing extension
+note_list() {
+    find $NOTE_FOLDER -type f -not -path '*/\.*' | cut -c $(( ${#NOTE_FOLDER} + 2 ))- | sed -e "s/.$NOTE_EXT$//"
+}
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+# MAIN
+#———————————————————————————————————————————————————————————————————————————————————————————————————————————————————————
+note_main "$@"
